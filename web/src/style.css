@@ -48,3 +48,8 @@ td.num { font-variant-numeric: tabular-nums; }
 footer { margin-top: 28px; color: var(--muted); font-size: 13px; }
 footer a { color: var(--accent); text-decoration: none; }
 .note { margin-top: 10px; color: var(--muted); font-size: 12px; }
+button { background: var(--accent); color: #04202a; border: 0; border-radius: 8px; padding: 8px 14px; font-weight: 600; cursor: pointer; }
+button.danger { background: var(--bad); color: #2a0a0a; }
+input { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; width: 90px; }
+.cmdrow { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.cmdrow:first-of-type { border-top: 0; }

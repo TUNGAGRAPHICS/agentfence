@@ -76,6 +76,8 @@ app.innerHTML = `
   <section class="grid" id="stats"></section>
   <h2>Allowed targets</h2>
   <div class="allowed" id="allowed"></div>
+    <h2>Owner controls</h2>
+  <div class="card" id="owner"></div>
   <h2>Request log</h2>
   <div class="tablewrap"><table>
     <thead><tr><th>#</th><th>Time</th><th>Request ID</th><th>Target</th><th>Amount</th><th>Result</th></tr></thead>
@@ -146,3 +148,38 @@ async function refresh() {
 
 refresh();
 setInterval(refresh, POLL_MS);
+// ---------- Owner controls: copy-ready CLI commands ----------
+function toYocto(s: string): bigint {
+  const [w, f = ""] = s.trim().split(".");
+  return BigInt(w || "0") * YOCTO + BigInt((f + "0".repeat(24)).slice(0, 24));
+}
+
+const cmd = (method: string, args: object, deposit: string, gas = "30") =>
+  `near contract call-function as-transaction ${VAULT} ${method} json-args '${JSON.stringify(args).replace(/"/g, '\\"')}' prepaid-gas '${gas} Tgas' attached-deposit '${deposit}' sign-as ${OWNER} network-config testnet sign-with-keychain send`;
+
+$("owner").innerHTML = `
+  <p class="note">Owner actions are signed by ${esc(OWNER)} in your terminal. Copy a command and run it in PowerShell.</p>
+  <div class="cmdrow"><span>Pause the agent</span><button class="danger" data-c="pause">Copy command</button></div>
+  <div class="cmdrow"><span>Resume the agent</span><button data-c="resume">Copy command</button></div>
+  <div class="cmdrow"><span>Withdraw <input id="amt" value="0.2" inputmode="decimal" /> NEAR</span><button data-c="withdraw">Copy command</button></div>
+  <p class="note" id="msg"></p>`;
+
+$("owner").querySelectorAll<HTMLButtonElement>("button[data-c]").forEach((b) => {
+  b.onclick = async () => {
+    const which = b.dataset.c!;
+    let text: string;
+    if (which === "pause") text = cmd("pause", { agent: AGENT }, "0 NEAR");
+    else if (which === "resume") text = cmd("resume", { agent: AGENT }, "1 yoctoNEAR");
+    else {
+      const v = ($("amt") as HTMLInputElement).value;
+      if (!/^\d+(\.\d+)?$/.test(v)) { $("msg").textContent = "Enter an amount like 0.2"; return; }
+      text = cmd("withdraw", { agent: AGENT, amount: toYocto(v).toString() }, "1 yoctoNEAR", "60");
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      $("msg").textContent = "Copied. Paste it into PowerShell.";
+    } catch {
+      $("msg").textContent = text;
+    }
+  };
+});
