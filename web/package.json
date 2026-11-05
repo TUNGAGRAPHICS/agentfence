@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fastnear/near-connect": "^0.14.1",
     "near-api-js": "^7.0.0"
   },
   "devDependencies": {
