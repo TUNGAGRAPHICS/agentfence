@@ -44,6 +44,7 @@ h1 { margin: 0; font-size: 24px; letter-spacing: -0.02em; }
 /* cards */
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin: 14px 0 6px; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 15px 17px; }
+.card.wide { grid-column: 1 / -1; }
 .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.07em; }
 .value { font-size: 26px; font-weight: 650; margin-top: 4px; font-variant-numeric: tabular-nums; }
 .value small { font-size: 13px; color: var(--muted); font-weight: 400; }
@@ -84,9 +85,12 @@ input:focus { outline: 2px solid rgba(76, 201, 240, 0.4); border-color: var(--ac
 .msg { margin: 12px 0 0; font-size: 13px; min-height: 18px; color: var(--muted); }
 .msg.ok { color: var(--ok); }
 .msg.err { color: var(--bad); }
-.cli { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+.cli { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
 .cli summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 .cmdrow { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.fgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 12px 0; }
+.fgrid label { display: flex; flex-direction: column; gap: 6px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
+.fgrid input { width: 100%; text-transform: none; letter-spacing: 0; font-size: 14px; color: var(--text); }
 
 /* log */
 .loghead { display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
@@ -107,10 +111,5 @@ tr.fresh td { animation: flash 2.4s ease-out; }
 @keyframes flash { 0% { background: rgba(76, 201, 240, 0.28); } 100% { background: transparent; } }
 
 footer { margin-top: 30px; color: var(--muted); font-size: 13px; }
-@media (max-width: 560px) { h1 { font-size: 21px; } .value { font-size: 22px; } }
-.card.wide { grid-column: 1 / -1; }
-.form, .fgrid { margin-top: 8px; }
-.fgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 12px 0; }
-.fgrid label { display: flex; flex-direction: column; gap: 6px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
-.fgrid input { width: 100%; text-transform: none; letter-spacing: 0; font-size: 14px; color: var(--text); }
 #who { margin-top: 4px; }
+@media (max-width: 560px) { h1 { font-size: 21px; } .value { font-size: 22px; } }

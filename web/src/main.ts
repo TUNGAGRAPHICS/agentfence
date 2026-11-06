@@ -1,23 +1,36 @@
 import "./style.css";
 import { JsonRpcProvider } from "near-api-js";
 
-// URL overrides: ?vault=...&owner=...&agent=...&nft=...
+// URL overrides: ?vault=...&owner=...&agent=...&nft=...   (add &wallet=1 to try the experimental wallet button)
 const params = new URLSearchParams(location.search);
 const RPC = params.get("rpc") ?? "https://test.rpc.fastnear.com";
 const VAULT = params.get("vault") ?? "agentfence.tunga.testnet";
 const NFT = params.get("nft") ?? "agentnft.tunga.testnet";
 const PINNED_OWNER = params.get("owner");
+const WALLET_ENABLED = params.get("wallet") === "1";
 const DEFAULT_OWNER = "tunga.testnet";
 const DEFAULT_AGENT = "spikeagent2.tunga.testnet";
 const POLL_MS = 4000;
 const LOG_SIZE = 60;
 
 const store = {
-  get: (k: string) => { try { return localStorage.getItem(k); } catch { return null; } },
-  set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* ignore */ } },
+  get: (k: string) => {
+    try {
+      return localStorage.getItem(k);
+    } catch {
+      return null;
+    }
+  },
+  set: (k: string, v: string) => {
+    try {
+      localStorage.setItem(k, v);
+    } catch {
+      /* ignore */
+    }
+  },
 };
 
-// The dashboard follows the connected wallet unless ?owner= pins it.
+// The dashboard follows the connected wallet (experimental) unless ?owner= pins it.
 let OWNER = PINNED_OWNER ?? DEFAULT_OWNER;
 let AGENT = params.get("agent") ?? store.get("agentfence.agent") ?? DEFAULT_AGENT;
 
@@ -89,7 +102,10 @@ function kindOf(s: Status): Kind {
 }
 function statusPill(s: Status): string {
   const k = kindOf(s);
-  if (k === "rejected") return `<span class="pill bad">Rejected · ${esc(REASONS[(s as any).Rejected] ?? (s as any).Rejected)}</span>`;
+  if (k === "rejected") {
+    const r = (s as { Rejected: string }).Rejected;
+    return `<span class="pill bad">Rejected · ${esc(REASONS[r] ?? r)}</span>`;
+  }
   if (k === "executed") return `<span class="pill ok">Executed</span>`;
   if (k === "refunded") return `<span class="pill warn">Failed · refunded</span>`;
   return `<span class="pill warn">${esc(s)}</span>`;
@@ -139,7 +155,7 @@ let filter: "all" | "executed" | "rejected" | "refunded" = "all";
 let ownerViewKey = "";
 
 let connector: any = null;
-let walletState: "loading" | "ready" | "unavailable" = "loading";
+let walletState: "loading" | "ready" | "unavailable" | "off" = WALLET_ENABLED ? "loading" : "off";
 let account: string | null = null;
 let busy = false;
 let ownerMsg: { text: string; kind: "info" | "ok" | "err" } | null = null;
@@ -153,7 +169,7 @@ function renderStats() {
   const p = lastPolicy;
   if (!p) {
     $("stats").innerHTML = `<div class="card wide"><div class="label">Policy</div><div class="value">None yet</div>
-      <div class="sub">${esc(short(OWNER))} has no policy for ${esc(AGENT)}. Connect your wallet and create one below.</div></div>`;
+      <div class="sub">${esc(short(OWNER))} has no policy for ${esc(AGENT)}.</div></div>`;
     return;
   }
   const dep = BigInt(p.total_deposited);
@@ -161,8 +177,12 @@ function renderStats() {
   const stat = (label: string, value: string, unit = "", extra = "") =>
     `<div class="card"><div class="label">${label}</div><div class="value">${value} <small>${unit}</small></div>${extra}</div>`;
   $("stats").innerHTML =
-    stat("Budget left", near(p.balance), "NEAR",
-      `<div class="bar"><span style="width:${Math.min(100, Math.max(0, pct))}%"></span></div><div class="sub">of ${near(p.total_deposited)} NEAR deposited</div>`) +
+    stat(
+      "Budget left",
+      near(p.balance),
+      "NEAR",
+      `<div class="bar"><span style="width:${Math.min(100, Math.max(0, pct))}%"></span></div><div class="sub">of ${near(p.total_deposited)} NEAR deposited</div>`,
+    ) +
     stat("Max per tx", near(p.max_per_tx), "NEAR", `<div class="sub">hard cap per request</div>`) +
     stat("Total spent", near(p.total_spent), "NEAR", `<div class="sub">executed spends only</div>`) +
     `<div class="card"><div class="label">Status</div><div class="value">${
@@ -215,9 +235,13 @@ $("filters").onclick = (e) => {
   renderLog();
 };
 
-// ---------- wallet ----------
+// ---------- wallet (experimental, off by default: add ?wallet=1) ----------
 function renderWallet() {
   const el = $("wallet");
+  if (walletState === "off") {
+    el.innerHTML = "";
+    return;
+  }
   if (walletState === "unavailable") {
     el.innerHTML = `<span class="net warnnet" title="The wallet library did not load.">Wallet unavailable</span>`;
     return;
@@ -245,6 +269,11 @@ function setAccount(a: string | null) {
   refresh();
 }
 
+const friendly = (e: any) => {
+  const t = String(e?.message ?? e);
+  return /reject|cancel|denied|closed/i.test(t) ? "Cancelled in the wallet." : t;
+};
+
 async function doConnect() {
   try {
     await connector.connect();
@@ -271,7 +300,7 @@ $("wallet").onclick = async (e) => {
 async function initWallet() {
   try {
     const { NearConnector } = await import("@fastnear/near-connect");
-    connector = new NearConnector({ network: "testnet" } as any);
+    connector = new NearConnector({ network: "testnet", features: { testnet: true } } as any);
     connector.on("wallet:signIn", (e: any) => setAccount(e?.accounts?.[0]?.accountId ?? null));
     connector.on("wallet:signOut", () => setAccount(null));
     walletState = "ready";
@@ -296,6 +325,8 @@ async function initWallet() {
 async function ownerCall(method: string, args: object, deposit: string, gasTera = 30n) {
   const wallet = await connector.wallet();
   return wallet.signAndSendTransaction({
+    network: "testnet",
+    signerId: account ?? undefined,
     receiverId: VAULT,
     actions: [
       {
@@ -312,8 +343,8 @@ const cli = (method: string, args: object, deposit: string, gas = "30") =>
 
 function cliBlock(): string {
   if (OWNER !== DEFAULT_OWNER) return "";
-  return `<details class="cli"><summary>Prefer the terminal? Copy a command</summary>
-    <p class="note">Signed by ${esc(OWNER)} with the NEAR CLI. Paste into PowerShell.</p>
+  return `<details class="cli" ${walletState === "off" ? "open" : ""}><summary>Run owner actions from the terminal</summary>
+    <p class="note">Signed by ${esc(OWNER)} with the NEAR CLI. Click Copy, then paste into PowerShell.</p>
     <div class="cmdrow"><span>Pause the agent</span><button class="danger small" data-c="pause">Copy</button></div>
     <div class="cmdrow"><span>Resume the agent</span><button class="small" data-c="resume">Copy</button></div>
     <div class="cmdrow"><span>Withdraw <input id="cli-amt" value="0.2" inputmode="decimal" /> NEAR</span><button class="small" data-c="withdraw">Copy</button></div>
@@ -354,7 +385,9 @@ function renderOwner() {
   ownerViewKey = `${walletState}|${account}|${OWNER}|${AGENT}|${!!lastPolicy}|${busy}`;
   const el = $("owner");
   let top: string;
-  if (walletState === "loading") {
+  if (walletState === "off") {
+    top = `<p class="note">Owner actions are signed with the NEAR CLI by <b>${esc(OWNER)}</b>, so the agent never holds this authority.</p>`;
+  } else if (walletState === "loading") {
     top = `<p class="note">Loading wallet...</p>`;
   } else if (walletState === "unavailable") {
     top = `<p class="note">The wallet library could not load in this browser. Owner actions are available from the terminal below.</p>`;
@@ -379,10 +412,6 @@ function setMsg(text: string, kind: "info" | "ok" | "err") {
     m.textContent = text;
   }
 }
-const friendly = (e: any) => {
-  const t = String(e?.message ?? e);
-  return /reject|cancel|denied|closed/i.test(t) ? "Cancelled in the wallet." : t;
-};
 
 $("owner").onclick = async (e) => {
   const t = e.target as HTMLElement;
@@ -397,7 +426,10 @@ $("owner").onclick = async (e) => {
     else if (which === "resume") text = cli("resume", { agent: AGENT }, "1 yoctoNEAR");
     else {
       const v = val("cli-amt");
-      if (!isAmount(v)) { $("cli-msg").textContent = "Enter an amount like 0.2"; return; }
+      if (!isAmount(v)) {
+        $("cli-msg").textContent = "Enter an amount like 0.2";
+        return;
+      }
       text = cli("withdraw", { agent: AGENT, amount: toYocto(v).toString() }, "1 yoctoNEAR", "60");
     }
     try {
@@ -433,21 +465,34 @@ $("owner").onclick = async (e) => {
       label = "Top up";
       run = () => ownerCall("top_up", { agent: AGENT }, toYocto(v).toString());
     } else {
-      const agent = val("c-agent"), budget = val("c-budget"), max = val("c-max"), recv = val("c-recv"), meth = val("c-meth");
+      const agent = val("c-agent"),
+        budget = val("c-budget"),
+        max = val("c-max"),
+        recv = val("c-recv"),
+        meth = val("c-meth");
       if (!/^[a-z0-9._-]{2,64}$/.test(agent)) return setMsg("Enter the agent's NEAR account, like agent.testnet", "err");
       if (!isAmount(budget) || !isAmount(max)) return setMsg("Budget and max per request must be amounts like 1 and 0.5", "err");
       if (!recv || !meth) return setMsg("Enter the allowed contract and method", "err");
       label = "Create policy";
       run = async () => {
-        await ownerCall("create_policy", { agent, max_per_tx: toYocto(max).toString(), allowed: [{ receiver: recv, method: meth }] }, toYocto(budget).toString());
+        await ownerCall(
+          "create_policy",
+          { agent, max_per_tx: toYocto(max).toString(), allowed: [{ receiver: recv, method: meth }] },
+          toYocto(budget).toString(),
+        );
         AGENT = agent;
         store.set("agentfence.agent", agent);
       };
     }
-        busy = true;
+    busy = true;
     renderOwner();
     setMsg(`${label}: waiting for wallet approval...`, "info");
-    await run();
+    await Promise.race([
+      run(),
+      new Promise((_, rej) =>
+        setTimeout(() => rej(new Error("No response from the wallet. If you approved, the page will update shortly.")), 90000),
+      ),
+    ]);
     busy = false;
     ownerMsg = { text: `${label} sent. Updating...`, kind: "ok" };
     renderWho();
@@ -464,7 +509,8 @@ $("owner").onclick = async (e) => {
 
 // ---------- data loop ----------
 async function refresh() {
-  const owner = OWNER, agent = AGENT;
+  const owner = OWNER,
+    agent = AGENT;
   try {
     const [policy, count] = await Promise.all([
       view<Policy | null>("get_policy", { owner, agent }),
@@ -498,4 +544,4 @@ renderWallet();
 renderOwner();
 refresh();
 setInterval(refresh, POLL_MS);
-initWallet();
+if (WALLET_ENABLED) initWallet();
